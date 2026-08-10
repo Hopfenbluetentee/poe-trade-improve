@@ -57,7 +57,8 @@
     { label: 'iLvl',    filterTitle: 'Item Level' },
     { label: 'Gem Lvl', filterTitle: 'Gem Level' },
     { label: 'Quality',    filterTitle: 'Quality' },
-    { label: 'Strands', filterTitle: 'Memory Strands' }
+    { label: 'Strands', filterTitle: 'Memory Strands' },
+    { label: 'Intangibility', filterTitle: 'Intangibility' }
   ];
 
   // Nothing uses the generic dropdown mirror right now; Item Rarity moved to
