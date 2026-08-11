@@ -1,0 +1,8 @@
+# Keep line endings deterministic regardless of who edits a file: the
+# GitHub web editor, a local editor, or Git's own core.autocrlf conversion.
+#
+# The repository already stores LF. `eol=lf` makes the working tree match it
+# as well, so the checked-out files are byte-identical to what is committed
+# and a plain diff against a copy kept outside the repo does not report every
+# single line as changed.
+* text=auto eol=lf
