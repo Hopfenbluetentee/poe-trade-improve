@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PoE Trade Improve
 // @namespace    poe-trade-improve
-// @version      5.3
+// @version      5.4
 // @description  Compact mirror bar for the PoE trade search filters
 // @license      MIT
 // @copyright    2026 Hopfenbluetentee, https://github.com/Hopfenbluetentee/poe-trade-improve
