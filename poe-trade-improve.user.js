@@ -24,8 +24,8 @@
   // Viewport widths at which the bar gives something up, cheapest first:
   // long captions shrink to abbreviations, then the single line breaks up.
   // Tune these if the bar wraps too early or too late on your setup.
-  const NARROW_LABELS_PX = 1600;
-  const NARROW_STACK_PX = 1250;
+  const NARROW_LABELS_PX = 1520;
+  const NARROW_STACK_PX = 1150;
 
   // The site's own "Back to Top" button owns the bottom-right corner. Ours
   // copies its geometry and colours and stacks one gap above it.
