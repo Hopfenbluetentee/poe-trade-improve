@@ -21,6 +21,12 @@
   const SLOW_SELECT = false;   // step through selectOption with visible delays
   const STEP_MS = 1500;        // pause between steps when SLOW_SELECT is on
 
+  // Viewport widths at which the bar gives something up, cheapest first:
+  // long captions shrink to abbreviations, then the single line breaks up.
+  // Tune these if the bar wraps too early or too late on your setup.
+  const NARROW_LABELS_PX = 1600;
+  const NARROW_STACK_PX = 1250;
+
   // The site's own "Back to Top" button owns the bottom-right corner. Ours
   // copies its geometry and colours and stacks one gap above it.
   const TOP_BUTTON_SELECTOR = '.top-btn';
@@ -53,12 +59,14 @@
       states: ['Any', 'No', 'Yes'], glow: 'rgba(150,200,230,.9)' }
   ];
 
+  // `short` is the caption used once the viewport gets too narrow for the
+  // full one; only the captions long enough to matter carry one.
   const RANGE_FILTERS = [
     { label: 'iLvl',    filterTitle: 'Item Level' },
-    { label: 'Gem Lvl', filterTitle: 'Gem Level' },
-    { label: 'Quality',    filterTitle: 'Quality' },
+    { label: 'Gem Lvl', filterTitle: 'Gem Level', short: 'Gem' },
+    { label: 'Quality',    filterTitle: 'Quality', short: 'Qual' },
     { label: 'Strands', filterTitle: 'Memory Strands' },
-    { label: 'Intangibility', filterTitle: 'Intangibility' }
+    { label: 'Intangibility', filterTitle: 'Intangibility', short: 'Intang' }
   ];
 
   // Nothing uses the generic dropdown mirror right now; Item Rarity moved to
@@ -116,12 +124,24 @@
       #pti-bar input[type=number] {
         -moz-appearance: textfield; appearance: textfield;
       }
+      /* Wrapping is the backstop: whatever the breakpoints below do not
+         catch still drops to the next line instead of off the right edge. */
       #pti-bar .pti-row {
-        display: flex; align-items: center; gap: 10px; width: 100%;
+        display: flex; align-items: center; flex-wrap: wrap;
+        gap: 10px; width: 100%;
       }
       #pti-bar .pti-row + .pti-row {
         margin-top: 8px; padding-top: 8px; border-top: 1px solid #262118;
       }
+      /* Slot geometry belongs here rather than in inline styles, otherwise
+         the media queries at the end could not override it. */
+      #pti-bar .pti-left, #pti-bar .pti-center, #pti-bar .pti-right,
+      #pti-bar .pti-rarity, #pti-bar .pti-fields, #pti-bar .pti-price {
+        display: flex; align-items: center; flex-wrap: wrap;
+        gap: 8px; min-width: 0;
+      }
+      #pti-bar .pti-center { flex: 1 1 auto; justify-content: flex-end; gap: 6px; }
+      #pti-bar .pti-price { margin-left: auto; }
       /* label, inputs and clear button share one frame */
       #pti-bar .pti-field {
         display: inline-flex; align-items: stretch; height: 26px;
@@ -135,6 +155,9 @@
         color: #c9b78f; font-size: 11px; font-weight: 600;
         letter-spacing: .6px; text-transform: uppercase; white-space: nowrap;
       }
+      /* Both spellings sit in the DOM and the viewport picks one, which
+         keeps the swap to a single CSS rule with no relayout logic. */
+      #pti-bar .pti-label-short { display: none; }
       #pti-bar .pti-field select {
         height: 100%; max-width: 190px; padding: 0 6px;
         border: 0; background: #1b1813; color: #e0d6c0;
@@ -235,6 +258,21 @@
         display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
       }
       .pti-floating-actions .power-control-mirror:hover { filter: brightness(1.3); }
+
+      /* Narrow: buy room by abbreviating the longest captions. Nothing
+         moves yet, so the layout stays familiar. */
+      @media (max-width: ${NARROW_LABELS_PX}px) {
+        #pti-bar .pti-label-long { display: none; }
+        #pti-bar .pti-label-short { display: inline; }
+      }
+      /* Very narrow: give the range filters a line to themselves, which
+         pushes rarity and buyout onto the next one - rarity keeps the left
+         edge, buyout is held right by its auto margin. */
+      @media (max-width: ${NARROW_STACK_PX}px) {
+        #pti-bar .pti-fields { order: 1; flex: 1 0 100%; }
+        #pti-bar .pti-rarity { order: 2; }
+        #pti-bar .pti-price  { order: 3; }
+      }
     `;
     (document.head || document.documentElement).appendChild(style);
   })();
@@ -774,10 +812,27 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
     return button;
   }
 
-  function addFieldLabel(group, label) {
+  // `short` is optional; when given, both spellings are rendered and CSS
+  // decides which one is visible at the current viewport width.
+  function addFieldLabel(group, label, short) {
     const labelEl = document.createElement('span');
     labelEl.className = 'pti-field-label';
-    labelEl.textContent = label;
+
+    if (short) {
+      const long = document.createElement('span');
+      long.className = 'pti-label-long';
+      long.textContent = label;
+
+      const abbreviated = document.createElement('span');
+      abbreviated.className = 'pti-label-short';
+      abbreviated.textContent = short;
+
+      labelEl.append(long, abbreviated);
+      labelEl.title = label;
+    } else {
+      labelEl.textContent = label;
+    }
+
     group.appendChild(labelEl);
   }
 
@@ -808,7 +863,7 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
   }
 
   function addRangeMirror(slot, config) {
-    const { label, filterTitle } = config;
+    const { label, filterTitle, short } = config;
 
     const group = document.createElement('span');
     group.className = 'pti-field';
@@ -823,13 +878,13 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
       if (DEBUG) console.log('[PTI] range filter ready:', filterTitle,
         '- fields:', originals.length);
 
-      addFieldLabel(group, label);
+      addFieldLabel(group, label, short);
       addMirroredInputs(group, originals, label);
     }, 20000, `range:${filterTitle}`);
   }
 
   function addDropdownMirror(slot, config) {
-    const { label, filterTitle } = config;
+    const { label, filterTitle, short } = config;
 
     const group = document.createElement('span');
     group.className = 'pti-field';
@@ -839,7 +894,7 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
       const multiselect = filter.querySelector('.multiselect');
       if (DEBUG) console.log('[PTI] dropdown filter ready:', filterTitle);
 
-      addFieldLabel(group, label);
+      addFieldLabel(group, label, short);
 
       const select = document.createElement('select');
       lockElement(select);
@@ -1000,7 +1055,7 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
 
   // Buyout Price: min/max fields plus currency shortcut buttons
   function addBuyoutMirror(slot, config) {
-    const { label, filterTitle } = config;
+    const { label, filterTitle, short } = config;
 
     const group = document.createElement('span');
     group.className = 'pti-field';
@@ -1015,7 +1070,7 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
       const originals = numberInputsOf(filter);
       if (DEBUG) console.log('[PTI] buyout filter ready - fields:', originals.length);
 
-      addFieldLabel(group, label);
+      addFieldLabel(group, label, short);
       addMirroredInputs(group, originals, label);
 
       // Only an exact match highlights a button; any other currency clears all
@@ -1323,21 +1378,23 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
     bottomRow.className = 'pti-row';
     bar.appendChild(bottomRow);
 
-    const addSlot = (parent, className, extraStyle) => {
+    // Styling lives in the stylesheet so the media queries can reach it.
+    const addSlot = (parent, className) => {
       const slot = document.createElement('div');
       slot.className = className;
-      slot.style.cssText =
-        'display:flex;align-items:center;gap:8px;' + (extraStyle || '');
       parent.appendChild(slot);
       return slot;
     };
 
     const left   = addSlot(topRow, 'pti-left');
-    const center = addSlot(topRow, 'pti-center', 'flex:1 1 auto;justify-content:flex-end;gap:6px;');
+    const center = addSlot(topRow, 'pti-center');
     const right  = addSlot(topRow, 'pti-right');
 
-    const fields = addSlot(bottomRow, 'pti-fields', 'gap:8px;');
-    const price  = addSlot(bottomRow, 'pti-price', 'margin-left:auto;gap:8px;');
+    // Rarity sits in its own slot rather than among the range filters, so
+    // it can be reordered independently when the row has to break up.
+    const rarity = addSlot(bottomRow, 'pti-rarity');
+    const fields = addSlot(bottomRow, 'pti-fields');
+    const price  = addSlot(bottomRow, 'pti-price');
 
     // Sits before .search-advanced so the bar keeps its position when the
     // filter panel expands.
@@ -1350,7 +1407,7 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
       if (DEBUG) console.log('[PTI] fallback: bar inserted before', controls.className);
     }
 
-    return { bar, left, fields, center, right, price };
+    return { bar, left, rarity, fields, center, right, price };
   }
 
   const isSearchTabActive = () => {
@@ -1420,7 +1477,7 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
         'the previous teardown did not remove it');
       return;
     }
-    const { bar, left, fields, center, right, price } = slots;
+    const { bar, left, rarity, fields, center, right, price } = slots;
 
     addMirroredButton(left, SITE_BUTTONS.live, 'Live Search', { useSkin: true });
 
@@ -1430,12 +1487,14 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
     addMirroredButton(right, SITE_BUTTONS.filters, 'Show Filters', {});
     addMirroredButton(right, SITE_BUTTONS.search, 'Search', { useSkin: true });
 
-    addRarityMirror(fields, { label: 'Rarity', filterTitle: 'Item Rarity' });
+    addRarityMirror(rarity, { label: 'Rarity', filterTitle: 'Item Rarity' });
 
     DROPDOWN_FILTERS.forEach(config => addDropdownMirror(fields, config));
     RANGE_FILTERS.forEach(config => addRangeMirror(fields, config));
 
-    addBuyoutMirror(price, { label: 'Buyout', filterTitle: 'Buyout Price' });
+    addBuyoutMirror(price, {
+      label: 'Buyout', short: 'B/O', filterTitle: 'Buyout Price'
+    });
 
     addFloatingActionBar();
     watchLiveSearchState();
