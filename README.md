@@ -6,6 +6,10 @@ It adds a compact bar above the search filters on
 `https://www.pathofexile.com/trade/search/*`, mirroring the filters you reach for
 most often so you do not have to scroll through the filter panel for them.
 
+![The bar sitting above the trade results: rarity chips, item level, gem level,
+quality, strands and intangibility ranges, buyout price with currency shortcuts,
+and mirrored Live Search, Clear, Show Filters and Search buttons.](documentation/showcase_search_improve.png)
+
 ## Installation
 
 The script needs a userscript manager to run. These instructions use
