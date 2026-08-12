@@ -6,6 +6,7 @@
 // @license      MIT
 // @copyright    2026 Hopfenbluetentee, https://github.com/Hopfenbluetentee/poe-trade-improve
 // @match        https://www.pathofexile.com/trade/search/*
+// @match        https://www.pathofexile.com/trade2/search/*
 // @grant        none
 // @run-at       document-idle
 // @updateURL    https://github.com/Hopfenbluetentee/poe-trade-improve/raw/refs/heads/main/poe-trade-improve.meta.js
