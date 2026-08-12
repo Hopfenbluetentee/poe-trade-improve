@@ -116,11 +116,16 @@
         { label: 'Corrupted', filterTitle: 'Corrupted',
           path: 'Currency/CurrencyVaal',
           states: ['Any', 'No', 'Yes'], glow: 'rgba(224,90,58,.9)' },
-        // No PoE2 artwork path is known for these two, so they render as
-        // lettered chips. Filling in `path` is all it takes to change that.
+        // PoE2 artwork is served from /gen/image/ under a server-signed
+        // URL: the base64 segment carries the art path and realm, and the
+        // segment after it is a signature that cannot be computed here. So
+        // these two name the image outright rather than a 2DItems/ path -
+        // Architect's Orb and Ancient Ribs respectively.
         { label: 'Twice Corrupted', filterTitle: 'Twice Corrupted',
+          path: 'https://web.poecdn.com/gen/image/WzI1LDE0LHsiZiI6IjJESXRlbXMvQ3VycmVuY3kvSW5jdXJzaW9uQ3JhZnRpbmdPcmJzL0luY3Vyc2lvbkdyZWF0ZXJWYWFsT3JiIiwidyI6MSwiaCI6MSwic2NhbGUiOjEsInJlYWxtIjoicG9lMiJ9XQ/09c3772d37/IncursionGreaterVaalOrb.png',
           states: ['Any', 'No', 'Yes'], glow: 'rgba(224,60,40,.9)' },
         { label: 'Desecrated', filterTitle: 'Desecrated',
+          path: 'https://web.poecdn.com/gen/image/WzI1LDE0LHsiZiI6IjJESXRlbXMvQ3VycmVuY3kvQWJ5c3MvQW5jaWVudFJpYnMiLCJ3IjoxLCJoIjoxLCJzY2FsZSI6MSwicmVhbG0iOiJwb2UyIn1d/addabb8b66/AncientRibs.png',
           states: ['Any', 'No', 'Yes'], glow: 'rgba(150,110,190,.9)' },
         { label: 'Fractured', filterTitle: 'Fractured',
           path: 'Currency/FracturingOrbCombined',
