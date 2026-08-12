@@ -136,7 +136,6 @@
       ],
       ranges: [
         { label: 'iLvl',    filterTitle: 'Item Level' },
-        { label: 'Gem Lvl', filterTitle: 'Gem Level', short: 'Gem' },
         { label: 'Quality', filterTitle: 'Item Quality', short: 'Qual' }
       ],
       rarities: [
