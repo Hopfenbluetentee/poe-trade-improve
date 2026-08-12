@@ -41,7 +41,11 @@
   const CORNER_SETTLE_MS = 350;
 
   const ART_BASE = 'https://web.poecdn.com/image/Art/2DItems/';
-  const iconUrl = (path) => `${ART_BASE}${path}.png`;
+  // A path is taken as relative to ART_BASE and gets the .png appended, but
+  // a full URL passes through untouched - PoE2 artwork is not served from
+  // that tree, so its entries have to name the image outright.
+  const iconUrl = (path) =>
+    /^https?:\/\//i.test(path) ? path : `${ART_BASE}${path}.png`;
 
   // Both trade sites run the same Vue application, so every selector and
   // widget below works on either. Only the filter names differ, and those
@@ -55,7 +59,8 @@
   //   filterTitle  matched against the site's filter caption (prefix match)
   //   label        our caption; also the letter used if no icon is available
   //   short        caption for narrow viewports, only where it is worth it
-  //   path         artwork below 2DItems/, without .png; omit if unknown
+  //   path         artwork below 2DItems/ without .png, or a full URL;
+  //                omit it and the chip falls back to a lettered placeholder
   //   option       must match the site's combobox entry exactly
   const GAME_CONFIGS = {
     poe1: {
