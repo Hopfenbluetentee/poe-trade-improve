@@ -6,6 +6,7 @@
 // @license      MIT
 // @copyright    2026 Hopfenbluetentee, https://github.com/Hopfenbluetentee/poe-trade-improve
 // @match        https://www.pathofexile.com/trade/search/*
+// @match        https://www.pathofexile.com/trade2/search/*
 // @grant        none
 // @run-at       document-idle
 // @updateURL    https://github.com/Hopfenbluetentee/poe-trade-improve/raw/refs/heads/main/poe-trade-improve.meta.js
@@ -40,62 +41,133 @@
   const CORNER_SETTLE_MS = 350;
 
   const ART_BASE = 'https://web.poecdn.com/image/Art/2DItems/';
-  const iconUrl = (path) => `${ART_BASE}${path}.png`;
+  // A path is taken as relative to ART_BASE and gets the .png appended, but
+  // a full URL passes through untouched - PoE2 artwork is not served from
+  // that tree, so its entries have to name the image outright.
+  const iconUrl = (path) =>
+    /^https?:\/\//i.test(path) ? path : `${ART_BASE}${path}.png`;
 
-  // Toggle buttons. `path` is relative to 2DItems/, without .png
-  const TRISTATE_FILTERS = [
-    { label: 'Identified', filterTitle: 'Identified',
-      path: 'Currency/CurrencyIdentification',
-      states: ['Any', 'No', 'Yes'], glow: 'rgba(200,180,130,.9)' },
-    { label: 'Corrupted', filterTitle: 'Corrupted',
-      path: 'Currency/CurrencyVaal',
-      states: ['Any', 'No', 'Yes'], glow: 'rgba(224,90,58,.9)' },
-    { label: 'Foulborn', filterTitle: 'Foulborn',
-      path: 'Currency/Chayula/FoulbornRegal',
-      states: ['Any', 'No', 'Yes'], glow: 'rgba(190,120,220,.9)' },
-    { label: 'Fractured', filterTitle: 'Fractured Item',
-      path: 'Currency/FracturingOrbCombined',
-      states: ['Any', 'No', 'Yes'], glow: 'rgba(160,190,255,.9)' },
-    { label: 'Mirrored', filterTitle: 'Mirrored',
-      path: 'Currency/CurrencyDuplicate',
-      states: ['Any', 'No', 'Yes'], glow: 'rgba(150,200,230,.9)' }
-  ];
+  // Both trade sites run the same Vue application, so every selector and
+  // widget below works on either. Only the filter names differ, and those
+  // live here - one self-contained set per game.
+  //
+  // The sets are deliberately kept apart even where an entry would fit both
+  // games: a name that happens to match today is not a reason to couple the
+  // two, and PoE1 must not be bent to suit PoE2.
+  //
+  // Per entry:
+  //   filterTitle  matched against the site's filter caption (prefix match)
+  //   label        our caption; also the letter used if no icon is available
+  //   short        caption for narrow viewports, only where it is worth it
+  //   path         artwork below 2DItems/ without .png, or a full URL;
+  //                omit it and the chip falls back to a lettered placeholder
+  //   option       must match the site's combobox entry exactly
+  const GAME_CONFIGS = {
+    poe1: {
+      tristates: [
+        { label: 'Identified', filterTitle: 'Identified',
+          path: 'Currency/CurrencyIdentification',
+          states: ['Any', 'No', 'Yes'], glow: 'rgba(200,180,130,.9)' },
+        { label: 'Corrupted', filterTitle: 'Corrupted',
+          path: 'Currency/CurrencyVaal',
+          states: ['Any', 'No', 'Yes'], glow: 'rgba(224,90,58,.9)' },
+        { label: 'Foulborn', filterTitle: 'Foulborn',
+          path: 'Currency/Chayula/FoulbornRegal',
+          states: ['Any', 'No', 'Yes'], glow: 'rgba(190,120,220,.9)' },
+        { label: 'Fractured', filterTitle: 'Fractured Item',
+          path: 'Currency/FracturingOrbCombined',
+          states: ['Any', 'No', 'Yes'], glow: 'rgba(160,190,255,.9)' },
+        { label: 'Mirrored', filterTitle: 'Mirrored',
+          path: 'Currency/CurrencyDuplicate',
+          states: ['Any', 'No', 'Yes'], glow: 'rgba(150,200,230,.9)' }
+      ],
+      ranges: [
+        { label: 'iLvl',    filterTitle: 'Item Level' },
+        { label: 'Gem Lvl', filterTitle: 'Gem Level', short: 'Gem' },
+        { label: 'Quality',    filterTitle: 'Quality', short: 'Qual' },
+        { label: 'Strands', filterTitle: 'Memory Strands' },
+        { label: 'Intangibility', filterTitle: 'Intangibility', short: 'Intang' }
+      ],
+      // The tints come from the site's own item-colour custom properties
+      // (--color-game-normal-item and friends), so they read as in-game. The
+      // exception is unique: at its true rgb(175, 96, 37) it is far darker
+      // than the other three and vanishes beside them, so the chip uses a
+      // lightened version of the same hue.
+      rarities: [
+        { label: 'N', option: 'Normal',         rgb: '200, 200, 200' },
+        { label: 'M', option: 'Magic',          rgb: '136, 136, 255' },
+        { label: 'R', option: 'Rare',           rgb: '255, 255, 119' },
+        { label: 'U', option: 'Unique',         rgb: '222, 138, 62' },
+        // A struck-through U: everything that is not unique.
+        { label: 'U', option: 'Any Non-Unique', rgb: '222, 138, 62', struck: true }
+      ],
+      currencies: [
+        { label: 'Any', option: 'Chaos Orb Equivalent' },
+        { icon: 'Currency/CurrencyRerollRare', option: 'Chaos Orb',  title: 'Chaos Orb' },
+        { icon: 'Currency/CurrencyModValues',  option: 'Divine Orb', title: 'Divine Orb' }
+      ]
+    },
 
-  // `short` is the caption used once the viewport gets too narrow for the
-  // full one; only the captions long enough to matter carry one.
-  const RANGE_FILTERS = [
-    { label: 'iLvl',    filterTitle: 'Item Level' },
-    { label: 'Gem Lvl', filterTitle: 'Gem Level', short: 'Gem' },
-    { label: 'Quality',    filterTitle: 'Quality', short: 'Qual' },
-    { label: 'Strands', filterTitle: 'Memory Strands' },
-    { label: 'Intangibility', filterTitle: 'Intangibility', short: 'Intang' }
-  ];
+    poe2: {
+      tristates: [
+        { label: 'Identified', filterTitle: 'Identified',
+          path: 'Currency/CurrencyIdentification',
+          states: ['Any', 'No', 'Yes'], glow: 'rgba(200,180,130,.9)' },
+        { label: 'Corrupted', filterTitle: 'Corrupted',
+          path: 'Currency/CurrencyVaal',
+          states: ['Any', 'No', 'Yes'], glow: 'rgba(224,90,58,.9)' },
+        // PoE2 artwork is served from /gen/image/ under a server-signed
+        // URL: the base64 segment carries the art path and realm, and the
+        // segment after it is a signature that cannot be computed here. So
+        // these two name the image outright rather than a 2DItems/ path -
+        // Architect's Orb and Ancient Ribs respectively.
+        { label: 'Twice Corrupted', filterTitle: 'Twice Corrupted',
+          path: 'https://web.poecdn.com/gen/image/WzI1LDE0LHsiZiI6IjJESXRlbXMvQ3VycmVuY3kvSW5jdXJzaW9uQ3JhZnRpbmdPcmJzL0luY3Vyc2lvbkdyZWF0ZXJWYWFsT3JiIiwidyI6MSwiaCI6MSwic2NhbGUiOjEsInJlYWxtIjoicG9lMiJ9XQ/09c3772d37/IncursionGreaterVaalOrb.png',
+          states: ['Any', 'No', 'Yes'], glow: 'rgba(224,60,40,.9)' },
+        { label: 'Desecrated', filterTitle: 'Desecrated',
+          path: 'https://web.poecdn.com/gen/image/WzI1LDE0LHsiZiI6IjJESXRlbXMvQ3VycmVuY3kvQWJ5c3MvQW5jaWVudFJpYnMiLCJ3IjoxLCJoIjoxLCJzY2FsZSI6MSwicmVhbG0iOiJwb2UyIn1d/addabb8b66/AncientRibs.png',
+          states: ['Any', 'No', 'Yes'], glow: 'rgba(150,110,190,.9)' },
+        { label: 'Fractured', filterTitle: 'Fractured',
+          path: 'Currency/FracturingOrbCombined',
+          states: ['Any', 'No', 'Yes'], glow: 'rgba(160,190,255,.9)' },
+        { label: 'Mirrored', filterTitle: 'Mirrored',
+          path: 'Currency/CurrencyDuplicate',
+          states: ['Any', 'No', 'Yes'], glow: 'rgba(150,200,230,.9)' }
+      ],
+      ranges: [
+        { label: 'iLvl',    filterTitle: 'Item Level' },
+        { label: 'Quality', filterTitle: 'Item Quality', short: 'Qual' }
+      ],
+      rarities: [
+        { label: 'N', option: 'Normal',         rgb: '200, 200, 200' },
+        { label: 'M', option: 'Magic',          rgb: '136, 136, 255' },
+        { label: 'R', option: 'Rare',           rgb: '255, 255, 119' },
+        { label: 'U', option: 'Unique',         rgb: '222, 138, 62' },
+        { label: 'U', option: 'Any Non-Unique', rgb: '222, 138, 62', struck: true }
+      ],
+      currencies: [
+        { label: 'Any', option: 'Exalted Orb Equivalent' },
+        { icon: 'Currency/CurrencyAddModToRare', option: 'Exalted Orb', title: 'Exalted Orb' },
+        { icon: 'Currency/CurrencyModValues',    option: 'Divine Orb',  title: 'Divine Orb' }
+      ]
+    }
+  };
+
+  // The site states which game it is serving, so there is nothing to guess:
+  // tradeOpts.basePath is /trade for PoE1 and /trade2 for PoE2. The path is
+  // only a fallback for the case where that object is not there yet.
+  const IS_POE2 = /\/trade2(\/|$)/.test(
+    (window.tradeOpts && window.tradeOpts.basePath) || location.pathname);
+  const GAME_CONFIG = IS_POE2 ? GAME_CONFIGS.poe2 : GAME_CONFIGS.poe1;
+
+  const TRISTATE_FILTERS = GAME_CONFIG.tristates;
+  const RANGE_FILTERS = GAME_CONFIG.ranges;
+  const RARITIES = GAME_CONFIG.rarities;
+  const CURRENCIES = GAME_CONFIG.currencies;
 
   // Nothing uses the generic dropdown mirror right now; Item Rarity moved to
-  // the button strip below. Kept so another combobox filter can be added.
+  // the button strip. Kept so another combobox filter can be added.
   const DROPDOWN_FILTERS = [];
-
-  // Item Rarity shortcuts. `option` must match the original text exactly.
-  // The tints come from the site's own item-colour custom properties
-  // (--color-game-normal-item and friends), so they read as in-game. The
-  // exception is unique: at its true rgb(175, 96, 37) it is far darker than
-  // the other three and vanishes beside them, so the chip uses a lightened
-  // version of the same hue.
-  const RARITIES = [
-    { label: 'N', option: 'Normal',         rgb: '200, 200, 200' },
-    { label: 'M', option: 'Magic',          rgb: '136, 136, 255' },
-    { label: 'R', option: 'Rare',           rgb: '255, 255, 119' },
-    { label: 'U', option: 'Unique',         rgb: '222, 138, 62' },
-    // A struck-through U: everything that is not unique.
-    { label: 'U', option: 'Any Non-Unique', rgb: '222, 138, 62', struck: true }
-  ];
-
-  // Buyout currency shortcuts. `option` must match the original text exactly.
-  const CURRENCIES = [
-    { label: 'Any', option: 'Chaos Orb Equivalent' },
-    { icon: 'Currency/CurrencyRerollRare', option: 'Chaos Orb',  title: 'Chaos Orb' },
-    { icon: 'Currency/CurrencyModValues',  option: 'Divine Orb', title: 'Divine Orb' }
-  ];
 
   // Each entry: CSS selectors first, text pattern as fallback
   const SITE_BUTTONS = {
@@ -640,7 +712,6 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
       'flex:0 0 auto;';
 
     const image = document.createElement('img');
-    image.src = url;
     image.style.cssText =
       `width:${size}px;height:${size}px;object-fit:contain;` +
       'transition:filter .12s, opacity .12s;';
@@ -653,14 +724,20 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
     box.appendChild(image);
     box.appendChild(banOverlay);
 
-    let imageFailed = false;
+    // `url` may be absent when no artwork is known for a filter. Treat that
+    // as an already-failed image so the lettered placeholder stands in,
+    // rather than firing a request that is bound to 404.
+    let imageFailed = !url;
     let banned = false;
 
-    image.addEventListener('error', () => {
-      imageFailed = true;
-      console.warn('[PTI] icon failed to load:', url);
-      box.innerHTML = placeholderSvg(banned, size, label);
-    });
+    if (url) {
+      image.src = url;
+      image.addEventListener('error', () => {
+        imageFailed = true;
+        console.warn('[PTI] icon failed to load:', url);
+        box.innerHTML = placeholderSvg(banned, size, label);
+      });
+    }
 
     box.setState = (state) => {
       banned = (state === 'No');
@@ -705,7 +782,8 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
         'padding:2px;margin:0;border:0;background:none;box-shadow:none;' +
         'cursor:pointer;line-height:0;transition:background .12s;';
 
-      const icon = createStateIcon(ICON_SIZE, iconUrl(path), label, glow);
+      const icon = createStateIcon(
+        ICON_SIZE, path ? iconUrl(path) : null, label, glow);
       button.appendChild(icon);
 
       let rendered = null;
