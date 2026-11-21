@@ -21,6 +21,9 @@
   const HIDE_CONTROLS = true;   // clip the site's own controls bar
   const RADIUS = '4px';
   const POLL_MS = 1000;        // fallback tick where Vue changes fire no event
+  // Gap between the combobox writes of one toggle: selectOption needs the
+  // field to itself while it focuses, filters and clicks.
+  const TOGGLE_STEP_MS = 260;
   const SLOW_SELECT = false;   // step through selectOption with visible delays
   const STEP_MS = 1500;        // pause between steps when SLOW_SELECT is on
 
@@ -64,13 +67,24 @@
   //   option       must match the site's combobox entry exactly
   const GAME_CONFIGS = {
     poe1: {
-      tristates: [
+      toggles: [
         { label: 'Identified', filterTitle: 'Identified',
           path: 'Currency/CurrencyIdentification',
           states: ['Any', 'No', 'Yes'], glow: 'rgba(200,180,130,.9)' },
-        { label: 'Corrupted', filterTitle: 'Corrupted',
+        { label: 'Corrupted',
           path: 'Currency/CurrencyVaal',
-          states: ['Any', 'No', 'Yes'], glow: 'rgba(224,90,58,.9)' },
+          glow: 'rgba(224,90,58,.9)',
+          // The site keeps these in two separate fields, so moving to
+          // twice-corrupted has to release the plain corrupted field, and
+          // the other way round on the way back.
+          filterTitles: ['Corrupted', 'Twice Corrupted'],
+          states: [
+            { name: 'Any', values: ['Any', 'Any'] },
+            { name: 'No',  values: ['No',  'Any'] },
+            { name: 'Yes', values: ['Yes', 'Any'] },
+            { name: 'Twice Corrupted', values: ['Any', 'Yes'],
+              title: 'Twice Corrupted' }
+          ] },
         { label: 'Foulborn', filterTitle: 'Foulborn',
           path: 'Currency/Chayula/FoulbornRegal',
           states: ['Any', 'No', 'Yes'], glow: 'rgba(190,120,220,.9)' },
@@ -83,10 +97,10 @@
       ],
       ranges: [
         { label: 'iLvl',    filterTitle: 'Item Level' },
+        { label: 'Area Lvl', filterTitle: 'Area Level', short: 'Area' },
         { label: 'Gem Lvl', filterTitle: 'Gem Level', short: 'Gem' },
         { label: 'Quality',    filterTitle: 'Quality', short: 'Qual' },
-        { label: 'Strands', filterTitle: 'Memory Strands' },
-        { label: 'Intangibility', filterTitle: 'Intangibility', short: 'Intang' }
+        { label: 'Strands', filterTitle: 'Memory Strands' }
       ],
       // The tints come from the site's own item-colour custom properties
       // (--color-game-normal-item and friends), so they read as in-game. The
@@ -109,7 +123,7 @@
     },
 
     poe2: {
-      tristates: [
+      toggles: [
         { label: 'Identified', filterTitle: 'Identified',
           path: 'Currency/CurrencyIdentification',
           states: ['Any', 'No', 'Yes'], glow: 'rgba(200,180,130,.9)' },
@@ -160,7 +174,7 @@
     (window.tradeOpts && window.tradeOpts.basePath) || location.pathname);
   const GAME_CONFIG = IS_POE2 ? GAME_CONFIGS.poe2 : GAME_CONFIGS.poe1;
 
-  const TRISTATE_FILTERS = GAME_CONFIG.tristates;
+  const TOGGLE_FILTERS = GAME_CONFIG.toggles;
   const RANGE_FILTERS = GAME_CONFIG.ranges;
   const RARITIES = GAME_CONFIG.rarities;
   const CURRENCIES = GAME_CONFIG.currencies;
@@ -177,10 +191,16 @@
     search:  { selectors: ['.btn.search-btn'],                             text: /^search$/i }
   };
 
+  // `banned` draws the crossed-out overlay, `glow` adds the halo in the
+  // toggle's own colour, and `badge` is laid over the artwork - that is how
+  // "corrupted" and "corrupted twice" stay apart at a glance.
   const ICON_STATE_LOOK = {
     Any: { filter: 'grayscale(0.85) brightness(1.25) contrast(1.1)', opacity: '0.85' },
-    Yes: { filter: 'brightness(1.15)', opacity: '1' },
-    No:  { filter: 'brightness(0.85) saturate(0.8)', opacity: '1' }
+    Yes: { filter: 'brightness(1.15)', opacity: '1', glow: true },
+    No:  { filter: 'brightness(0.85) saturate(0.8)', opacity: '1', banned: true },
+    'Twice Corrupted': {
+      filter: 'brightness(1.3) saturate(1.2)', opacity: '1', glow: true, badge: '2×'
+    }
   };
 
   const SEARCH_ICON_SVG =
@@ -421,6 +441,19 @@
       const filter = findFilterByTitle(filterTitle);
       return filter && filter.querySelector('.multiselect') ? filter : null;
     }, onFound, 20000, `filter:${filterTitle}`);
+  }
+
+  // Same, for a toggle that owns several of the site's filters at once. It
+  // resolves only once every one of them is rendered, handing over the
+  // multiselects in the order the titles were given.
+  function waitForMultiselectFilters(filterTitles, onFound) {
+    waitFor(() => {
+      const found = filterTitles.map((title) => {
+        const filter = findFilterByTitle(title);
+        return filter && filter.querySelector('.multiselect');
+      });
+      return found.every(Boolean) ? found : null;
+    }, onFound, 20000, `filters:${filterTitles.join('+')}`);
   }
 
   function findSiteButton(spec, scope) {
@@ -721,8 +754,20 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
       'position:absolute;inset:0;display:none;pointer-events:none;';
     banOverlay.innerHTML = banSvg(size);
 
+    // Laid over the artwork for states that need telling apart beyond a
+    // colour shift. The site ships Cinzel as its title face, so borrow it
+    // rather than introducing a font of our own.
+    const badgeOverlay = document.createElement('span');
+    badgeOverlay.style.cssText =
+      'position:absolute;inset:0;display:none;align-items:center;' +
+      'justify-content:center;pointer-events:none;' +
+      "font:700 15px/1 var(--font-titles, 'Cinzel', Georgia, serif);" +
+      'color:#ffdf9e;letter-spacing:.5px;' +
+      'text-shadow:0 0 4px #000, 0 1px 2px #000, 1px 0 2px #000, -1px 0 2px #000;';
+
     box.appendChild(image);
     box.appendChild(banOverlay);
+    box.appendChild(badgeOverlay);
 
     // `url` may be absent when no artwork is known for a filter. Treat that
     // as an already-failed image so the lettered placeholder stands in,
@@ -740,8 +785,8 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
     }
 
     box.setState = (state) => {
-      banned = (state === 'No');
       const look = ICON_STATE_LOOK[state] || ICON_STATE_LOOK.Any;
+      banned = !!look.banned;
 
       if (imageFailed) {
         box.innerHTML = placeholderSvg(banned, size, label);
@@ -750,8 +795,10 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
         return;
       }
       banOverlay.style.display = banned ? 'block' : 'none';
+      badgeOverlay.textContent = look.badge || '';
+      badgeOverlay.style.display = look.badge ? 'flex' : 'none';
       image.style.opacity = look.opacity;
-      image.style.filter = state === 'Yes'
+      image.style.filter = look.glow
         ? `${look.filter} drop-shadow(0 0 4px ${glow})`
         : look.filter;
     };
@@ -761,22 +808,54 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
 
   // --- Mirrored widgets ----------------------------------------------------
 
-  function addTristateButton(slot, config) {
-    const { label, filterTitle, states, path, glow } = config;
+  // A toggle owns one of the site's filters in the simple case, but it may
+  // own several: PoE1 keeps Corrupted and Twice Corrupted in separate
+  // fields, while the bar presents them as one button cycling through four
+  // states. Normalise both spellings into a list of titles plus states that
+  // say what every owned field has to read.
+  function normaliseToggle(config) {
+    if (config.filterTitles) return config;
+    return Object.assign({}, config, {
+      filterTitles: [config.filterTitle],
+      states: config.states.map((name) => ({ name, values: [name] }))
+    });
+  }
+
+  // selectOption drives a combobox through focus and simulated clicks, so
+  // two of them at once would fight over the focus. Walk the fields one at
+  // a time, skipping those that already read what we want - every write
+  // avoided is one interaction less that can go wrong.
+  function applyToggleState(multiselects, values, onDone) {
+    let next = 0;
+    const step = () => {
+      while (next < values.length &&
+             readSelected(multiselects[next]) === values[next]) next++;
+      if (next >= values.length) {
+        if (onDone) onDone();
+        return;
+      }
+      const index = next++;
+      selectOption(multiselects[index], values[index]);
+      setTimeout(step, TOGGLE_STEP_MS);
+    };
+    step();
+  }
+
+  function addToggleButton(slot, config) {
+    const { label, filterTitles, states, path, glow } = normaliseToggle(config);
 
     // Reserve the slot immediately so display order stays stable
     const holder = document.createElement('span');
     holder.style.cssText = 'display:inline-flex;';
     slot.appendChild(holder);
 
-    waitForMultiselectFilter(filterTitle, (filter) => {
-      const multiselect = filter.querySelector('.multiselect');
-      if (DEBUG) console.log('[PTI] tristate filter ready:', filterTitle);
+    waitForMultiselectFilters(filterTitles, (multiselects) => {
+      if (DEBUG) console.log('[PTI] toggle ready:', filterTitles.join(' + '));
 
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'power-control-btn';
-      button.dataset.filter = filterTitle;
+      button.dataset.filter = filterTitles.join('+');
       button.style.cssText =
         'display:flex;align-items:center;justify-content:center;' +
         'padding:2px;margin:0;border:0;background:none;box-shadow:none;' +
@@ -786,18 +865,33 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
         ICON_SIZE, path ? iconUrl(path) : null, label, glow);
       button.appendChild(icon);
 
+      const readAll = () => multiselects.map(readSelected);
+
+      // Our state is the one every owned field agrees with. A combination
+      // set through the site's own form may match none, which the click
+      // handler then treats as "start the cycle over".
+      const currentIndex = () => {
+        const current = readAll();
+        return states.findIndex((state) =>
+          state.values.every((value, i) => value === current[i]));
+      };
+
       let rendered = null;
       const render = () => {
-        const state = readSelected(multiselect);
-        if (state === rendered) return;
-        rendered = state;
-        icon.setState(state);
-        button.title = `${label}: ${state}`;
+        const index = currentIndex();
+        const state = index === -1 ? null : states[index];
+        const shown = state ? state.name : readAll().join(' / ');
+        if (shown === rendered) return;
+        rendered = shown;
+        icon.setState(state ? state.name : 'Any');
+        button.title = state
+          ? (state.title || `${label}: ${state.name}`)
+          : `${label}: ${shown}`;
       };
 
       button.addEventListener('click', () => {
-        const index = states.indexOf(readSelected(multiselect));
-        selectOption(multiselect, states[(index + 1) % states.length]);
+        const target = states[(currentIndex() + 1) % states.length];
+        applyToggleState(multiselects, target.values, render);
         setTimeout(render, 120);
       });
 
@@ -806,7 +900,7 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
       lockElement(button);
 
       // Pick up external changes: Clear button, URL load, original combobox
-      watchMultiselect(multiselect, render);
+      multiselects.forEach((multiselect) => watchMultiselect(multiselect, render));
 
       holder.appendChild(button);
     });
@@ -1032,7 +1126,7 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
 
   // Tinted at low alpha when idle, lit up when picked. The gradient plus the
   // inner top highlight give the chips some depth; the picked one gets a
-  // halo in its own item colour, echoing the tristate icons' glow.
+  // halo in its own item colour, echoing the toggle icons' glow.
   function setRarityLook(button, rgb, active) {
     button.classList.toggle('is-active', active);
     if (active) {
@@ -1518,7 +1612,7 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
       return true;
     }
     // The site can re-render the deeper filter fields (range/dropdown/
-    // tristate inputs) in place while the outer .controls container
+    // toggle inputs) in place while the outer .controls container
     // persists, so check those individually too.
     for (const original of trackedOriginals) {
       if (!original.isConnected) {
@@ -1561,7 +1655,7 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
 
     addMirroredButton(left, SITE_BUTTONS.live, 'Live Search', { useSkin: true });
 
-    TRISTATE_FILTERS.forEach(config => addTristateButton(center, config));
+    TOGGLE_FILTERS.forEach(config => addToggleButton(center, config));
 
     addMirroredButton(right, SITE_BUTTONS.clear, 'Clear', {});
     addMirroredButton(right, SITE_BUTTONS.filters, 'Show Filters', {});
