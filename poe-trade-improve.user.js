@@ -21,11 +21,16 @@
   const HIDE_CONTROLS = true;   // clip the site's own controls bar
   const RADIUS = '4px';
   const POLL_MS = 1000;        // fallback tick where Vue changes fire no event
-  // Gap between the combobox writes of one toggle: selectOption needs the
-  // field to itself while it focuses, filters and clicks.
-  const TOGGLE_STEP_MS = 260;
   const SLOW_SELECT = false;   // step through selectOption with visible delays
   const STEP_MS = 1500;        // pause between steps when SLOW_SELECT is on
+  const SELECT_STEP_MS = 40;   // selectOption's own pause between its steps
+
+  // How long one selectOption takes end to end: it waits once before
+  // clicking the option and once more before releasing the field. A toggle
+  // that writes several fields has to let that finish before touching the
+  // next one, so derive the gap instead of keeping a second number in step
+  // by hand.
+  const selectSettleMs = () => (SLOW_SELECT ? STEP_MS : SELECT_STEP_MS) * 2 + 10;
 
   // Viewport widths at which the bar gives something up, cheapest first:
   // long captions shrink to abbreviations, then the single line breaks up.
@@ -629,7 +634,7 @@
   function selectOption(multiselect, optionText) {
     const input = multiselect.querySelector('.multiselect__input');
     const scrollY = window.scrollY;
-    const delay = SLOW_SELECT ? STEP_MS : 40;
+    const delay = SLOW_SELECT ? STEP_MS : SELECT_STEP_MS;
     const log = (...args) => {
       if (SLOW_SELECT || DEBUG) console.log('[PTI/select]', ...args);
     };
@@ -836,7 +841,7 @@ ${banned ? `<span style="position:absolute;inset:0;">${banSvg(size)}</span>` : '
       }
       const index = next++;
       selectOption(multiselects[index], values[index]);
-      setTimeout(step, TOGGLE_STEP_MS);
+      setTimeout(step, selectSettleMs());
     };
     step();
   }
