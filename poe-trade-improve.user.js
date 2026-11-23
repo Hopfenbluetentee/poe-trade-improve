@@ -23,7 +23,7 @@
   const POLL_MS = 1000;        // fallback tick where Vue changes fire no event
   const SLOW_SELECT = false;   // step through selectOption with visible delays
   const STEP_MS = 1500;        // pause between steps when SLOW_SELECT is on
-  const SELECT_STEP_MS = 40;   // selectOption's own pause between its steps
+  const SELECT_STEP_MS = 30;   // selectOption's own pause between its steps
 
   // How long one selectOption takes end to end: it waits once before
   // clicking the option and once more before releasing the field. A toggle
